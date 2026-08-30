@@ -7,35 +7,73 @@
     "price": 1799,
     "image": "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=600",
     "wishlist_age_hours": 52,
-    "signals": {"size_chart_seconds": 91, "review_scroll_percent": 82, "image_zooms": 5, "similar_products_viewed": 6, "pdp_revisits": 3, "add_to_bag_hesitation": true},
+    "signals": {
+      "size_chart_seconds": 91,
+      "review_scroll_percent": 82,
+      "image_zooms": 5,
+      "similar_products_viewed": 6,
+      "pdp_revisits": 3,
+      "add_to_bag_hesitation": true
+    },
     "reviews": [
       "Fabric looks like the photos and feels light for summer outings.",
       "Runs slightly tight around the waist. Size up if between sizes.",
       "Good for brunch or festive casual wear, but not very formal.",
       "Color is accurate. Length is good for average height."
     ],
-    "return_notes": ["Most returns mention waist fit", "Low color-mismatch complaints", "Moderate size exchange rate"],
-    "similar_buyer_notes": ["Buyers with past A-line purchases mostly kept size M", "Often bought with tan sandals and oxidized earrings"],
-    "similar_saved_items": ["Black Floral Midi", "Maroon Fit & Flare Dress", "Olive Printed Kurta"]
+    "return_notes": [
+      "Most returns mention waist fit",
+      "Low color-mismatch complaints",
+      "Moderate size exchange rate"
+    ],
+    "similar_buyer_notes": [
+      "Buyers with past A-line purchases mostly kept size M",
+      "Often bought with tan sandals and oxidized earrings"
+    ],
+    "similar_saved_items": [
+      "Black Floral Midi",
+      "Maroon Fit & Flare Dress",
+      "Olive Printed Kurta"
+    ]
   },
   {
     "id": "MYN-002",
     "name": "White Chunky Sneakers",
     "brand": "Roadster",
     "category": "Footwear",
+    "comparison_group": "white-casual-sneakers",
     "price": 2199,
-    "image": "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=600",
+    "image": "https://assets.myntassets.com/h_200%2Cw_200%2Cc_fill%2Cg_auto/h_1440%2Cq_100%2Cw_1080/v1/assets/images/26530166/2023/12/20/9c00372d-27cb-48b3-95d3-056880a0279d1703048177799LibertyWomenWhitePrintedPUSneakers1.jpg",
     "wishlist_age_hours": 74,
-    "signals": {"size_chart_seconds": 64, "review_scroll_percent": 76, "image_zooms": 4, "similar_products_viewed": 9, "pdp_revisits": 4, "add_to_bag_hesitation": true},
+    "signals": {
+      "size_chart_seconds": 64,
+      "review_scroll_percent": 76,
+      "image_zooms": 4,
+      "similar_products_viewed": 9,
+      "pdp_revisits": 4,
+      "add_to_bag_hesitation": true
+    },
     "reviews": [
       "Looks premium for the price and goes with jeans.",
       "Sole is slightly heavy for long walking days.",
       "Size is mostly true, but wide feet may feel tight.",
       "Easy to clean, but creases after repeated use."
     ],
-    "return_notes": ["Fit returns higher for wide-foot users", "Few sole-quality complaints", "Good repeat-purchase signal"],
-    "similar_buyer_notes": ["Users who bought casual sneakers before kept this more often", "Frequently compared with Puma and HRX white sneakers"],
-    "similar_saved_items": ["Puma Court Sneakers", "HRX White Trainers", "Mast & Harbour Casual Shoes"]
+    "return_notes": [
+      "Fit returns higher for wide-foot users",
+      "Few sole-quality complaints",
+      "Good repeat-purchase signal"
+    ],
+    "similar_buyer_notes": [
+      "Users who bought casual sneakers before kept this more often",
+      "Frequently compared with Puma and HRX white sneakers"
+    ],
+    "similar_saved_items": [
+      "Off-White Court Sneakers",
+      "HRX White Trainers",
+      "Mast & Harbour Casual Shoes"
+    ],
+    "comparison_target_id": "MYN-008"
   },
   {
     "id": "MYN-003",
@@ -45,35 +83,73 @@
     "price": 2599,
     "image": "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600",
     "wishlist_age_hours": 29,
-    "signals": {"size_chart_seconds": 122, "review_scroll_percent": 68, "image_zooms": 6, "similar_products_viewed": 3, "pdp_revisits": 2, "add_to_bag_hesitation": false},
+    "signals": {
+      "size_chart_seconds": 122,
+      "review_scroll_percent": 68,
+      "image_zooms": 6,
+      "similar_products_viewed": 3,
+      "pdp_revisits": 2,
+      "add_to_bag_hesitation": false
+    },
     "reviews": [
       "Denim quality is strong and does not fade quickly.",
       "Slim fit is quite narrow around thighs.",
       "Good stretch, but check waist size carefully.",
       "Works well for office casual and weekend wear."
     ],
-    "return_notes": ["High returns from fit mismatch", "Low fabric-quality complaints", "Size exchange common"],
-    "similar_buyer_notes": ["Buyers with prior Levis purchases usually choose same waist size", "Athletic builds often size up"],
-    "similar_saved_items": ["Blue Skinny Jeans", "Black Straight Fit Jeans", "Grey Slim Fit Jeans"]
+    "return_notes": [
+      "High returns from fit mismatch",
+      "Low fabric-quality complaints",
+      "Size exchange common"
+    ],
+    "similar_buyer_notes": [
+      "Buyers with prior Levis purchases usually choose same waist size",
+      "Athletic builds often size up"
+    ],
+    "similar_saved_items": [
+      "Blue Skinny Jeans",
+      "Black Straight Fit Jeans",
+      "Grey Slim Fit Jeans"
+    ]
   },
   {
     "id": "MYN-004",
     "name": "Emerald Embroidered Kurta",
     "brand": "Libas",
     "category": "Ethnic Wear",
+    "comparison_group": "festive-green-kurtas",
     "price": 1499,
     "image": "/Users/karthikseshaprasanna/Downloads/myntra_maturation_mvp_standalone_jYPYw0/data/emerald_kurta.png",
     "wishlist_age_hours": 81,
-    "signals": {"size_chart_seconds": 48, "review_scroll_percent": 91, "image_zooms": 3, "similar_products_viewed": 5, "pdp_revisits": 5, "add_to_bag_hesitation": true},
+    "signals": {
+      "size_chart_seconds": 48,
+      "review_scroll_percent": 91,
+      "image_zooms": 3,
+      "similar_products_viewed": 5,
+      "pdp_revisits": 5,
+      "add_to_bag_hesitation": true
+    },
     "reviews": [
       "Embroidery looks elegant and close to catalog images.",
       "Fabric is comfortable but slightly thin.",
       "Good for small functions and festive office days.",
       "Customer photos would help because catalog lighting is too polished."
     ],
-    "return_notes": ["Low size return rate", "Some fabric thickness concerns", "High keep rate for festive use"],
-    "similar_buyer_notes": ["Often paired with cream palazzos", "Users buying festive kurtas kept this item often"],
-    "similar_saved_items": ["Teal Printed Kurta", "Green Straight Kurta", "Navy Embroidered Kurta"]
+    "return_notes": [
+      "Low size return rate",
+      "Some fabric thickness concerns",
+      "High keep rate for festive use"
+    ],
+    "similar_buyer_notes": [
+      "Often paired with cream palazzos",
+      "Users buying festive kurtas kept this item often"
+    ],
+    "similar_saved_items": [
+      "Sage Mirror-Work Kurta Set",
+      "Teal Printed Kurta",
+      "Navy Embroidered Kurta"
+    ],
+    "comparison_target_id": "MYN-007"
   },
   {
     "id": "MYN-005",
@@ -83,16 +159,34 @@
     "price": 3999,
     "image": "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600",
     "wishlist_age_hours": 18,
-    "signals": {"size_chart_seconds": 38, "review_scroll_percent": 45, "image_zooms": 2, "similar_products_viewed": 8, "pdp_revisits": 1, "add_to_bag_hesitation": false},
+    "signals": {
+      "size_chart_seconds": 38,
+      "review_scroll_percent": 45,
+      "image_zooms": 2,
+      "similar_products_viewed": 8,
+      "pdp_revisits": 1,
+      "add_to_bag_hesitation": false
+    },
     "reviews": [
       "Looks structured and premium.",
       "Oversized fit is intentional, not boxy if styled well.",
       "Better for layering than hot weather.",
       "Price feels high unless you need office or smart casual use."
     ],
-    "return_notes": ["Some returns cite oversized silhouette", "Low quality complaints", "Moderate price-value hesitation"],
-    "similar_buyer_notes": ["Users who own trousers or formal shirts kept it more", "Usually bought with white shirts and black trousers"],
-    "similar_saved_items": ["Black Longline Blazer", "Brown Casual Jacket", "Beige Trench Coat"]
+    "return_notes": [
+      "Some returns cite oversized silhouette",
+      "Low quality complaints",
+      "Moderate price-value hesitation"
+    ],
+    "similar_buyer_notes": [
+      "Users who own trousers or formal shirts kept it more",
+      "Usually bought with white shirts and black trousers"
+    ],
+    "similar_saved_items": [
+      "Black Longline Blazer",
+      "Brown Casual Jacket",
+      "Beige Trench Coat"
+    ]
   },
   {
     "id": "MYN-006",
@@ -102,15 +196,106 @@
     "price": 899,
     "image": "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600",
     "wishlist_age_hours": 9,
-    "signals": {"size_chart_seconds": 15, "review_scroll_percent": 24, "image_zooms": 1, "similar_products_viewed": 2, "pdp_revisits": 1, "add_to_bag_hesitation": false},
+    "signals": {
+      "size_chart_seconds": 15,
+      "review_scroll_percent": 24,
+      "image_zooms": 1,
+      "similar_products_viewed": 2,
+      "pdp_revisits": 1,
+      "add_to_bag_hesitation": false
+    },
     "reviews": [
       "Lightweight and good for running.",
       "Pocket depth could be better.",
       "True to size for most buyers.",
       "Good value for regular workouts."
     ],
-    "return_notes": ["Low return rate", "Few quality complaints", "Low uncertainty signal"],
-    "similar_buyer_notes": ["Workout shoppers convert quickly", "Often bought with dry-fit tees"],
-    "similar_saved_items": ["Black Training Shorts", "Grey Gym Shorts"]
+    "return_notes": [
+      "Low return rate",
+      "Few quality complaints",
+      "Low uncertainty signal"
+    ],
+    "similar_buyer_notes": [
+      "Workout shoppers convert quickly",
+      "Often bought with dry-fit tees"
+    ],
+    "similar_saved_items": [
+      "Black Training Shorts",
+      "Grey Gym Shorts"
+    ]
+  },
+  {
+    "id": "MYN-007",
+    "name": "Sage Mirror-Work Kurta Set",
+    "brand": "Sangria",
+    "category": "Ethnic Wear",
+    "comparison_group": "festive-green-kurtas",
+    "price": 1899,
+    "image": "https://img.theloom.in/live/media/catalog/product/cache/a90082cb40ab368e18a2b32bc067779d/m/s/msbw007-_1_.jpg",
+    "wishlist_age_hours": 21,
+    "signals": {
+      "size_chart_seconds": 31,
+      "review_scroll_percent": 37,
+      "image_zooms": 4,
+      "similar_products_viewed": 11,
+      "pdp_revisits": 3,
+      "add_to_bag_hesitation": true
+    },
+    "reviews": [
+      "Colour feels festive and easy to style with neutral bottoms.",
+      "Sleeves run a little narrow, so size confidence is still unclear.",
+      "Nice option for smaller occasions, but not enough customer photos yet."
+    ],
+    "return_notes": [
+      "Limited return history so fit confidence is still forming",
+      "A few buyers mention sleeves feel narrow",
+      "Evidence maturity is lower than the top festive kurta alternatives"
+    ],
+    "similar_buyer_notes": [
+      "Often saved alongside green festive kurtas"
+    ],
+    "similar_saved_items": [
+      "Emerald Embroidered Kurta",
+      "Teal Printed Kurta",
+      "Navy Embroidered Kurta"
+    ],
+    "comparison_target_id": "MYN-004"
+  },
+  {
+    "id": "MYN-008",
+    "name": "Off-White Court Sneakers",
+    "brand": "Puma",
+    "category": "Footwear",
+    "comparison_group": "white-casual-sneakers",
+    "price": 2499,
+    "image": "https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?w=600",
+    "wishlist_age_hours": 16,
+    "signals": {
+      "size_chart_seconds": 27,
+      "review_scroll_percent": 42,
+      "image_zooms": 3,
+      "similar_products_viewed": 10,
+      "pdp_revisits": 2,
+      "add_to_bag_hesitation": true
+    },
+    "reviews": [
+      "Clean silhouette and easy to style with denim or joggers.",
+      "Looks good in photos but a few buyers say cushioning feels average.",
+      "Some users wanted more width in the toe box for all-day wear."
+    ],
+    "return_notes": [
+      "Return history is still limited compared with mature sneaker listings",
+      "Some width complaints for wider feet",
+      "Decision confidence is lower because buyer proof is lighter"
+    ],
+    "similar_buyer_notes": [
+      "Usually compared against Roadster and HRX white sneakers"
+    ],
+    "similar_saved_items": [
+      "White Chunky Sneakers",
+      "HRX White Trainers",
+      "Mast & Harbour Casual Shoes"
+    ],
+    "comparison_target_id": "MYN-002"
   }
 ]

@@ -24,7 +24,7 @@ DB_PATH = BASE_DIR / "analytics.db"
 VIEW_WISHLIST = "Wishlist"
 VIEW_VERDICT = "Verdict Card"
 VIEW_ANALYTICS = "Analytics"
-VIEW_PM = "PM Notes"
+VIEW_COMPARISON = "Comparison Analysis"
 
 load_dotenv()
 
@@ -36,7 +36,6 @@ st.set_page_config(
 )
 
 
-@st.cache_data
 def load_products() -> List[Dict]:
     with open(DATA_PATH, "r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -118,16 +117,20 @@ def diagnose_hesitation(signals: Dict, product: Optional[Dict] = None) -> Tuple[
     return top, explanations[top]
 
 
-def maturity_status(product: Dict) -> str:
+def evidence_strength(product: Dict) -> int:
     signals = product["signals"]
-    evidence_strength = (
+    strength = (
         len(product.get("reviews", [])) * 8
         + len(product.get("return_notes", [])) * 8
         + len(product.get("similar_buyer_notes", [])) * 10
         + min(product.get("wishlist_age_hours", 0), 72) * 0.6
         + signals.get("review_scroll_percent", 0) * 0.2
     )
-    return "Verdict Ready" if evidence_strength >= 110 else "Building Verdict"
+    return int(round(strength))
+
+
+def maturity_status(product: Dict) -> str:
+    return "Verdict Ready" if evidence_strength(product) >= 110 else "Building Verdict"
 
 
 def confidence_score(product: Dict, hesitation: str) -> int:
@@ -139,10 +142,17 @@ def confidence_score(product: Dict, hesitation: str) -> int:
     score = base + review_count * 4 + buyer_notes * 5 + age * 0.15
 
     notes = " ".join(product.get("return_notes", [])).lower()
+    reviews_text = " ".join(product.get("reviews", [])).lower()
     if "high returns" in notes or "higher" in notes:
         score -= 8
     if "low return" in notes or "low size return" in notes:
         score += 6
+    if "repeat-purchase" in notes or "repeat purchase" in notes:
+        score += 5
+    if "true to size" in reviews_text or "size is mostly true" in reviews_text:
+        score += 4
+    if "looks premium for the price" in reviews_text or "good value" in reviews_text:
+        score += 3
     if hesitation == "Comparison Paralysis":
         score -= 10
     if hesitation == "Fit Doubt" and "fit" in notes and "high" in notes:
@@ -167,6 +177,7 @@ def fallback_case_file(product: Dict, hesitation: str, score: int) -> Dict:
 
     return {
         "fit_summary": _sentence_for_fit(product, hesitation, return_notes, buyer_notes),
+        "positive_signals": _positive_signals(product, score),
         "review_summary": "Buyers generally say: " + " ".join(reviews[:2]),
         "styling_use_case": _sentence_for_styling(product),
         "comparison_note": "Compared with {0}, this item is strongest when the shopper wants {1} with lower decision effort.".format(
@@ -196,6 +207,29 @@ def _sentence_for_styling(product: Dict) -> str:
     if category == "Western Wear":
         return "Best positioned for office, smart casual, and layered looks where the shopper needs extra confidence to justify the spend."
     return "Best positioned for practical repeat use where the shopper wants low-risk utility rather than heavy styling support."
+
+
+def _positive_signals(product: Dict, score: int) -> str:
+    notes = " ".join(product.get("return_notes", [])).lower()
+    reviews_text = " ".join(product.get("reviews", [])).lower()
+    signals: List[str] = []
+
+    if "low return" in notes or "low size return" in notes:
+        signals.append("low observed return friction")
+    if "true to size" in reviews_text or "size is mostly true" in reviews_text:
+        signals.append("buyers report reliable size confidence")
+    if "repeat-purchase" in notes or "repeat purchase" in notes:
+        signals.append("repeat-purchase behavior signals trust")
+    if "looks premium for the price" in reviews_text or "good value" in reviews_text:
+        signals.append("value perception is stronger than average")
+    if "high keep rate" in notes or "kept this item often" in notes:
+        signals.append("keep-rate signals are healthy")
+
+    if signals and score >= 62:
+        return "Positive signals: " + ", ".join(signals[:3]) + "."
+    if score >= 78:
+        return "Positive signals: buyer evidence is strong enough to support a confident recommendation."
+    return "Positive signals are still forming, so the MVP should lean on caution rather than a hard recommendation."
 
 
 def _watch_outs(return_notes: List[str], reviews: List[str]) -> str:
@@ -236,9 +270,10 @@ Diagnosed hesitation: {hesitation}
 Confidence score: {score}
 
 Return only valid JSON with these keys:
-fit_summary, review_summary, styling_use_case, comparison_note, watch_outs, recommended_action.
+fit_summary, positive_signals, review_summary, styling_use_case, comparison_note, watch_outs, recommended_action.
 Keep each value under 35 words.
 Do not invent discounts. Do not use urgency tricks.
+If the product is recommendation-worthy, include concrete positive buyer signals.
 """
         response = client.chat.completions.create(
             model=model,
@@ -341,7 +376,7 @@ def apply_theme() -> None:
             opacity: 1 !important;
         }
         .block-container {
-            padding-top: 1rem;
+            padding-top: 0.35rem;
             padding-bottom: 3rem;
             max-width: 1320px;
         }
@@ -402,13 +437,13 @@ def apply_theme() -> None:
             font-size: 0.92rem;
         }
         .wishlist-top {
-            padding: 0.1rem 0 1rem 0;
+            padding: 0.05rem 0 0.55rem 0;
         }
         .wishlist-title {
-            font-size: 2.2rem;
+            font-size: 1.7rem;
             font-weight: 800;
             color: #282c3f;
-            margin-bottom: 0.35rem;
+            margin-bottom: 0;
         }
         .wishlist-title span {
             font-weight: 500;
@@ -422,8 +457,8 @@ def apply_theme() -> None:
             background: #ffffff;
             border: 1px solid #f0f1f3;
             border-radius: 16px;
-            padding: 0.7rem 0.85rem 0.45rem 0.85rem;
-            margin-bottom: 1.4rem;
+            padding: 0.45rem 0.7rem 0.25rem 0.7rem;
+            margin-bottom: 1rem;
         }
         div[data-baseweb="radio"] > div {
             gap: 0.55rem;
@@ -454,7 +489,7 @@ def apply_theme() -> None:
             border-radius: 4px;
             overflow: hidden;
             background: #ffffff;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
         }
         .wishlist-card-shell.ready-shell {
             border-color: rgba(6, 95, 70, 1);
@@ -467,11 +502,11 @@ def apply_theme() -> None:
         .wish-image-shell {
             position: relative;
             background: #f5f5f6;
-            min-height: 320px;
+            min-height: 260px;
         }
         .wish-image-shell img {
             width: 100%;
-            height: 320px;
+            height: 260px;
             object-fit: cover;
             display: block;
         }
@@ -509,45 +544,45 @@ def apply_theme() -> None:
             color: #b91c5c;
         }
         .wish-detail {
-            padding: 1rem 1rem 0.75rem 1rem;
+            padding: 0.8rem 0.85rem 0.65rem 0.85rem;
         }
         .wish-brand {
-            font-size: 1.05rem;
+            font-size: 0.95rem;
             font-weight: 800;
             color: #282c3f;
             margin-bottom: 0.1rem;
         }
         .wish-name {
             color: #535766;
-            font-size: 1rem;
+            font-size: 0.92rem;
             line-height: 1.4;
-            min-height: 2.8rem;
+            min-height: 2.45rem;
         }
         .wish-price {
-            margin-top: 0.65rem;
+            margin-top: 0.45rem;
             color: #282c3f;
             font-weight: 800;
-            font-size: 1.12rem;
+            font-size: 1rem;
         }
         .wish-price span {
             color: #94969f;
             font-weight: 500;
             text-decoration: line-through;
             margin-left: 0.35rem;
-            font-size: 0.98rem;
+            font-size: 0.86rem;
         }
         .wish-price em {
             color: #ff905a;
             font-style: normal;
             font-weight: 700;
             margin-left: 0.35rem;
-            font-size: 0.98rem;
+            font-size: 0.84rem;
         }
         .wish-note {
             margin-top: 0.45rem;
             color: #7e818c;
-            font-size: 0.88rem;
-            min-height: 2.6rem;
+            font-size: 0.8rem;
+            min-height: 2.2rem;
         }
         .card-actions {
             padding: 0.25rem 1rem 0.6rem 1rem;
@@ -561,8 +596,100 @@ def apply_theme() -> None:
             background: #ffffff;
             border: 1px solid #ececec;
             border-radius: 16px;
-            padding: 1.15rem 1.2rem;
+            padding: 0.88rem 0.96rem;
             box-shadow: 0 6px 20px rgba(40, 44, 63, 0.04);
+        }
+        .verdict-hero {
+            background: linear-gradient(135deg, #fff7fa 0%, #ffffff 100%);
+            border: 1px solid #f5d5de;
+            border-radius: 18px;
+            padding: 0.92rem 1.02rem;
+            box-shadow: 0 10px 30px rgba(255, 63, 108, 0.08);
+        }
+        .verdict-product-title {
+            color: #282c3f;
+            font-size: 1.56rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin: 0.24rem 0 0.28rem 0;
+        }
+        .verdict-meta-line,
+        .verdict-price-line {
+            color: #4b5563;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .verdict-price-line {
+            margin-top: 0.25rem;
+            font-weight: 700;
+            color: #282c3f;
+        }
+        .verdict-explainer {
+            color: #6b7280;
+            font-size: 0.89rem;
+            line-height: 1.45;
+            margin-top: 0.48rem;
+        }
+        .decision-card {
+            background: #ffffff;
+            border: 1px solid #ececec;
+            border-radius: 18px;
+            padding: 0.92rem 1rem;
+            box-shadow: 0 8px 24px rgba(40, 44, 63, 0.05);
+        }
+        .decision-score {
+            color: #282c3f;
+            font-size: 1.72rem;
+            font-weight: 800;
+            margin-top: 0.3rem;
+        }
+        .decision-label {
+            color: #4b5563;
+            font-size: 0.94rem;
+            font-weight: 700;
+            margin-top: 0.2rem;
+        }
+        .signal-banner {
+            border-radius: 14px;
+            padding: 0.8rem 0.9rem;
+            margin-top: 0.85rem;
+            font-size: 0.94rem;
+            line-height: 1.5;
+        }
+        .signal-banner.positive {
+            background: rgba(6, 95, 70, 0.08);
+            border: 1px solid rgba(6, 95, 70, 0.18);
+            color: #065f46;
+        }
+        .signal-banner.caution {
+            background: rgba(217, 119, 6, 0.08);
+            border: 1px solid rgba(217, 119, 6, 0.18);
+            color: #92400e;
+        }
+        .verdict-stats {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.7rem;
+            margin-top: 0.9rem;
+        }
+        .verdict-stat {
+            border: 1px solid #ececec;
+            border-radius: 14px;
+            background: #ffffff;
+            padding: 0.64rem 0.76rem;
+        }
+        .verdict-stat-label {
+            color: #7e818c;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 700;
+        }
+        .verdict-stat-value {
+            color: #282c3f;
+            font-size: 1.02rem;
+            font-weight: 800;
+            margin-top: 0.2rem;
         }
         .section-card h4,
         .section-card p,
@@ -582,33 +709,35 @@ def apply_theme() -> None:
         }
         .verdict-copy {
             color: #4b5563;
-            line-height: 1.55;
-            margin-top: 0.65rem;
+            line-height: 1.38;
+            margin-top: 0.38rem;
+            font-size: 0.9rem;
         }
         .evidence-list {
-            margin: 0.6rem 0 0 0;
+            margin: 0.34rem 0 0 0;
             padding-left: 1rem;
             color: #282c3f;
         }
         .evidence-list li {
-            margin-bottom: 0.45rem;
-            line-height: 1.5;
+            margin-bottom: 0.24rem;
+            line-height: 1.32;
+            font-size: 0.86rem;
         }
         .case-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 0.7rem;
+            margin-top: 0.42rem;
         }
         .case-table th,
         .case-table td {
             text-align: left;
             vertical-align: top;
-            padding: 0.8rem 0.75rem;
+            padding: 0.5rem 0.56rem;
             border-top: 1px solid #ececec;
-            font-size: 0.95rem;
+            font-size: 0.86rem;
         }
         .case-table th {
-            width: 180px;
+            width: 122px;
             background: #fafbfc;
             font-weight: 800;
         }
@@ -695,6 +824,8 @@ def init_state() -> None:
         st.session_state["nav_view"] = st.session_state["active_view"]
     if "selected_product_id" not in st.session_state:
         st.session_state["selected_product_id"] = None
+    if "selected_comparison_id" not in st.session_state:
+        st.session_state["selected_comparison_id"] = None
     if "last_llm_error" not in st.session_state:
         st.session_state["last_llm_error"] = None
     if "pending_view" not in st.session_state:
@@ -703,8 +834,119 @@ def init_state() -> None:
 
 def open_verdict(product_id: str, hesitation: str, score: int) -> None:
     st.session_state["selected_product_id"] = product_id
+    st.session_state["selected_comparison_id"] = None
     st.session_state["pending_view"] = VIEW_VERDICT
     log_event(product_id, "verdict_viewed", {"hesitation": hesitation, "score": score})
+    st.rerun()
+
+
+def product_lookup(products: List[Dict]) -> Dict[str, Dict]:
+    return {product["id"]: product for product in products}
+
+
+def comparison_group_for(product: Dict) -> str:
+    return str(product.get("comparison_group") or product.get("category") or "").strip()
+
+
+def comparison_target(product: Dict, products: List[Dict]) -> Optional[Dict]:
+    products_by_id = product_lookup(products)
+    explicit_id = product.get("comparison_target_id")
+    if explicit_id and explicit_id in products_by_id:
+        return products_by_id[explicit_id]
+
+    primary_group = comparison_group_for(product)
+    category_matches = [
+        item for item in products
+        if item["id"] != product["id"] and comparison_group_for(item) == primary_group
+    ]
+    if not category_matches:
+        return None
+
+    ranked = sorted(
+        category_matches,
+        key=lambda item: (
+            confidence_score(item, diagnose_hesitation(item["signals"], item)[0]),
+            evidence_strength(item),
+            -int(item.get("price", 0)),
+        ),
+        reverse=True,
+    )
+    return ranked[0]
+
+
+def risk_markers(product: Dict) -> List[str]:
+    joined = " ".join(product.get("reviews", []) + product.get("return_notes", [])).lower()
+    markers = []
+    for marker in ["tight", "thin", "heavy", "creases", "oversized", "price", "wide feet", "fit mismatch", "narrow"]:
+        if marker in joined:
+            markers.append(marker)
+    return sorted(set(markers))
+
+
+def build_comparison_resolution(primary: Dict, candidate: Dict) -> Dict[str, object]:
+    primary_hesitation, _, primary_score, primary_label, primary_case = get_case_file(primary)
+    candidate_hesitation, _, candidate_score, candidate_label, candidate_case = get_case_file(candidate)
+    primary_evidence = evidence_strength(primary)
+    candidate_evidence = evidence_strength(candidate)
+    primary_risks = risk_markers(primary)
+    candidate_risks = risk_markers(candidate)
+
+    primary_rank = (primary_score, primary_evidence, -len(primary_risks), -int(primary["price"]))
+    candidate_rank = (candidate_score, candidate_evidence, -len(candidate_risks), -int(candidate["price"]))
+
+    winner, winner_hesitation, winner_score, winner_label, winner_case = (
+        (primary, primary_hesitation, primary_score, primary_label, primary_case)
+        if primary_rank >= candidate_rank
+        else (candidate, candidate_hesitation, candidate_score, candidate_label, candidate_case)
+    )
+    loser, loser_hesitation, loser_score, loser_label, loser_case = (
+        (candidate, candidate_hesitation, candidate_score, candidate_label, candidate_case)
+        if winner["id"] == primary["id"]
+        else (primary, primary_hesitation, primary_score, primary_label, primary_case)
+    )
+
+    score_gap = abs(primary_score - candidate_score)
+    evidence_gap = abs(primary_evidence - candidate_evidence)
+    decisive_edge = []
+    if score_gap >= 6:
+        decisive_edge.append("higher decision confidence")
+    if winner_case["watch_outs"] != loser_case["watch_outs"]:
+        decisive_edge.append("fewer buyer risk signals")
+    if evidence_gap >= 12:
+        decisive_edge.append("deeper evidence maturity")
+    if int(winner["price"]) < int(loser["price"]):
+        decisive_edge.append("lower spend for the same mission")
+    if not decisive_edge:
+        decisive_edge.append("clearer buyer proof for this need")
+
+    return {
+        "winner": winner,
+        "loser": loser,
+        "winner_hesitation": winner_hesitation,
+        "winner_score": winner_score,
+        "winner_label": winner_label,
+        "winner_case": winner_case,
+        "loser_hesitation": loser_hesitation,
+        "loser_score": loser_score,
+        "loser_label": loser_label,
+        "loser_case": loser_case,
+        "primary_hesitation": primary_hesitation,
+        "candidate_hesitation": candidate_hesitation,
+        "primary_score": primary_score,
+        "candidate_score": candidate_score,
+        "primary_evidence": primary_evidence,
+        "candidate_evidence": candidate_evidence,
+        "primary_risks": primary_risks,
+        "candidate_risks": candidate_risks,
+        "decisive_edge": decisive_edge,
+    }
+
+
+def open_comparison(primary_id: str, candidate_id: Optional[str]) -> None:
+    st.session_state["selected_product_id"] = primary_id
+    st.session_state["selected_comparison_id"] = candidate_id
+    st.session_state["pending_view"] = VIEW_COMPARISON
+    log_event(primary_id, "comparison_opened", {"candidate_id": candidate_id})
     st.rerun()
 
 
@@ -737,36 +979,12 @@ def render_top_nav() -> None:
 
 
 def render_header(products: List[Dict]) -> None:
-    ready_count = sum(1 for product in products if maturity_status(product) == "Verdict Ready")
-    avg_confidence = int(round(sum(get_case_file(product)[2] for product in products) / max(len(products), 1)))
-
+    current_view = st.session_state.get("active_view")
     render_top_nav()
-    st.markdown(
-        "<div class='wishlist-top'><div class='wishlist-title'>My Wishlist <span>{0} items</span></div><div class='wishlist-subtitle'>Shop the saved list like Myntra, then open a full-page verdict only when you want the decision layer.</div></div>".format(
-            len(products)
-        ),
-        unsafe_allow_html=True,
-    )
-
-    meta_left, meta_mid, meta_right = st.columns(3)
-    with meta_left:
+    if current_view == VIEW_WISHLIST:
         st.markdown(
-            "<div class='metric-card'><div class='label'>Verdict-ready now</div><div class='value'>{0}</div></div>".format(
-                ready_count
-            ),
-            unsafe_allow_html=True,
-        )
-    with meta_mid:
-        st.markdown(
-            "<div class='metric-card'><div class='label'>Needs more confidence</div><div class='value'>{0}</div></div>".format(
-                len(products) - ready_count
-            ),
-            unsafe_allow_html=True,
-        )
-    with meta_right:
-        st.markdown(
-            "<div class='metric-card'><div class='label'>Average confidence</div><div class='value'>{0}%</div></div>".format(
-                avg_confidence
+            "<div class='wishlist-top'><div class='wishlist-title'>My Wishlist <span>{0} items</span></div></div>".format(
+                len(products)
             ),
             unsafe_allow_html=True,
         )
@@ -775,14 +993,24 @@ def render_header(products: List[Dict]) -> None:
 
 
 def render_navigation() -> None:
+    if st.session_state.get("active_view") in {VIEW_VERDICT, VIEW_COMPARISON}:
+        return
+    visible_views = [VIEW_WISHLIST, VIEW_VERDICT, VIEW_ANALYTICS]
+    if st.session_state.get("active_view") == VIEW_COMPARISON:
+        st.session_state["nav_view"] = VIEW_VERDICT
+    elif st.session_state.get("nav_view") not in visible_views:
+        st.session_state["nav_view"] = st.session_state.get("active_view", VIEW_WISHLIST)
+
     st.markdown("<div class='view-strip'></div>", unsafe_allow_html=True)
     selected_view = st.radio(
         "View",
-        [VIEW_WISHLIST, VIEW_VERDICT, VIEW_ANALYTICS, VIEW_PM],
+        visible_views,
         horizontal=True,
         label_visibility="collapsed",
         key="nav_view",
     )
+    if st.session_state.get("active_view") == VIEW_COMPARISON and selected_view == VIEW_VERDICT:
+        return
     if selected_view != st.session_state.get("active_view"):
         st.session_state["active_view"] = selected_view
 
@@ -853,54 +1081,79 @@ def render_wishlist(products: List[Dict]) -> None:
 def render_verdict(product: Dict) -> None:
     hesitation, explanation, score, label, case = get_case_file(product)
     price, mrp, discount = pricing_snapshot(product)
+    positive_signals = case.get("positive_signals", "Positive signals are still forming.")
+    signal_class = "positive" if score >= 78 else "caution"
+    evidence_total = evidence_strength(product)
 
     header_left, header_right = st.columns([1.8, 1])
     with header_left:
-        st.markdown("<div class='kicker'>Verdict card</div>", unsafe_allow_html=True)
-        st.title(product["name"])
-        st.write("**{0}** · {1}".format(product["brand"], product["category"]))
-        st.write("₹{0}  ·  MRP ₹{1}  ·  {2}% OFF".format(f"{price:,}", f"{mrp:,}", discount))
-        st.caption(explanation)
+        st.markdown(
+            """
+            <div class='verdict-hero'>
+              <div class='kicker'>Verdict card</div>
+              <div class='verdict-product-title'>{name}</div>
+              <div class='verdict-meta-line'><strong>{brand}</strong> · {category}</div>
+              <div class='verdict-price-line'>₹{price} · MRP ₹{mrp} · {discount}% OFF</div>
+              <div class='verdict-explainer'>{explanation}</div>
+            </div>
+            """.format(
+                name=escape(product["name"]),
+                brand=escape(product["brand"]),
+                category=escape(product["category"]),
+                price=f"{price:,}",
+                mrp=f"{mrp:,}",
+                discount=discount,
+                explanation=escape(explanation),
+            ),
+            unsafe_allow_html=True,
+        )
     with header_right:
         if st.button("← Back to Wishlist", use_container_width=True):
             st.session_state["pending_view"] = VIEW_WISHLIST
             st.rerun()
         st.markdown(
-            "<div class='section-card'><div class='kicker'>Decision confidence</div><h3 style='margin:8px 0 6px 0;'>{0}</h3><div style='font-size:1.75rem;font-weight:800;color:#282c3f;'>{1}%</div></div>".format(
-                label, score
+            "<div class='decision-card'><div class='kicker'>Decision confidence</div><div class='decision-score'>{0}%</div><div class='decision-label'>{1}</div></div>".format(
+                score, escape(label)
             ),
             unsafe_allow_html=True,
         )
 
-    hero_left, hero_right = st.columns([1, 1.25])
-    with hero_left:
+    content_left, content_mid, content_right = st.columns([0.9, 1.18, 0.92])
+    with content_left:
         st.image(product["image"], use_column_width=True)
         st.progress(score / 100, text="Confidence score: {0}%".format(score))
-        metric_col1, metric_col2, metric_col3 = st.columns(3)
-        metric_col1.metric("Reviews", len(product.get("reviews", [])))
-        metric_col2.metric("Return signals", len(product.get("return_notes", [])))
-        metric_col3.metric("Comparisons", len(product.get("similar_saved_items", [])))
-    with hero_right:
         st.markdown(
             """
-            <div class='section-card'>
-              <div class='kicker'>Why this verdict helps</div>
-              <div class='verdict-copy'><strong>Primary hesitation:</strong> {hesitation}</div>
-              <div class='verdict-copy'><strong>Recommended action:</strong> {recommended_action}</div>
-              <div class='verdict-copy'><strong>Watch-outs:</strong> {watch_outs}</div>
+            <div class='verdict-stats'>
+              <div class='verdict-stat'>
+                <div class='verdict-stat-label'>Reviews</div>
+                <div class='verdict-stat-value'>{reviews}</div>
+              </div>
+              <div class='verdict-stat'>
+                <div class='verdict-stat-label'>Return Signals</div>
+                <div class='verdict-stat-value'>{returns}</div>
+              </div>
+              <div class='verdict-stat'>
+                <div class='verdict-stat-label'>Comparisons</div>
+                <div class='verdict-stat-value'>{comparisons}</div>
+              </div>
+              <div class='verdict-stat'>
+                <div class='verdict-stat-label'>Evidence</div>
+                <div class='verdict-stat-value'>{evidence}</div>
+              </div>
             </div>
             """.format(
-                hesitation=escape(hesitation),
-                recommended_action=escape(case["recommended_action"]),
-                watch_outs=escape(case["watch_outs"]),
+                reviews=len(product.get("reviews", [])),
+                returns=len(product.get("return_notes", [])),
+                comparisons=len(product.get("similar_saved_items", [])),
+                evidence=evidence_total,
             ),
             unsafe_allow_html=True,
         )
-
-    case_left, case_right = st.columns([1.15, 0.85])
-    with case_left:
+    with content_mid:
         rows = [
             ("Fit", case["fit_summary"]),
+            ("Positive signals", case.get("positive_signals", "Positive signals are still forming.")),
             ("Reviews", case["review_summary"]),
             ("Styling / Occasion", case["styling_use_case"]),
             ("Comparison", case["comparison_note"]),
@@ -918,75 +1171,217 @@ def render_verdict(product: Dict) -> None:
             """.format(rows=html_case_rows(rows)),
             unsafe_allow_html=True,
         )
-    with case_right:
+    with content_right:
         st.markdown(
             """
             <div class='section-card'>
-              <div class='kicker'>Similar saved items</div>
+              <div class='kicker'>Evidence snapshot</div>
+              <div class='verdict-copy'><strong>Primary hesitation:</strong> {hesitation}</div>
+              <div class='signal-banner {signal_class}'>{positive_signals}</div>
+              <div class='kicker' style='margin-top:0.8rem;'>Saved shortlist</div>
               <ul class='evidence-list'>{similar_items}</ul>
-              <div class='kicker' style='margin-top:1rem;'>Buyer evidence</div>
+              <div class='kicker' style='margin-top:0.8rem;'>Buyer evidence</div>
               <ul class='evidence-list'>{buyer_notes}</ul>
+              <div class='kicker' style='margin-top:0.8rem;'>Review highlights</div>
+              <ul class='evidence-list'>{reviews}</ul>
+              <div class='kicker' style='margin-top:0.8rem;'>Return &amp; trust signals</div>
+              <ul class='evidence-list'>{notes}</ul>
             </div>
             """.format(
+                hesitation=escape(hesitation),
+                positive_signals=escape(positive_signals),
+                signal_class=signal_class,
                 similar_items=html_bullets(product.get("similar_saved_items", [])),
                 buyer_notes=html_bullets(product.get("similar_buyer_notes", [])),
+                reviews=html_bullets(product.get("reviews", [])[:3]),
+                notes=html_bullets(product.get("return_notes", [])[:3]),
             ),
             unsafe_allow_html=True,
         )
 
-    reviews_col, returns_col = st.columns(2)
-    with reviews_col:
-        st.markdown(
-            """
-            <div class='section-card'>
-              <div class='kicker'>Review highlights</div>
-              <ul class='evidence-list'>{reviews}</ul>
-            </div>
-            """.format(reviews=html_bullets(product.get("reviews", []))),
-            unsafe_allow_html=True,
-        )
-    with returns_col:
-        st.markdown(
-            """
-            <div class='section-card'>
-              <div class='kicker'>Return &amp; trust signals</div>
-              <ul class='evidence-list'>{notes}</ul>
-            </div>
-            """.format(notes=html_bullets(product.get("return_notes", []))),
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<div class='kicker' style='margin-top:0.4rem;'>Decision</div>", unsafe_allow_html=True)
-    st.markdown("#### Decision")
-    decision_left, decision_mid, decision_right = st.columns(3)
+    decision_left, decision_right = st.columns([1.15, 0.85])
     with decision_left:
-        if st.button("Trust Verdict", type="primary", use_container_width=True):
-            log_event(product["id"], "trust_verdict", {"score": score, "label": label})
-            st.success("Verdict trusted. The item is now purchase-ready.")
-    with decision_mid:
-        if st.button("Add to Bag", use_container_width=True):
-            log_event(product["id"], "add_to_bag", {"source": "verdict_card", "score": score})
-            st.success("Added to bag based on the verdict.")
+        st.markdown(
+            """
+            <div class='section-card'>
+              <div class='kicker'>Decision now</div>
+              <div class='verdict-copy'><strong>Recommended action:</strong> {recommended_action}</div>
+              <div class='verdict-copy'><strong>Positive signals:</strong> {positive_signals}</div>
+              <div class='verdict-copy'><strong>Watch-outs:</strong> {watch_outs}</div>
+            </div>
+            """.format(
+                recommended_action=escape(case["recommended_action"]),
+                positive_signals=escape(positive_signals),
+                watch_outs=escape(case["watch_outs"]),
+            ),
+            unsafe_allow_html=True,
+        )
     with decision_right:
-        if st.button("Compare Again", use_container_width=True):
-            log_event(product["id"], "compare_again", {"similar_items": product.get("similar_saved_items", [])})
-            st.info("Comparison request captured. In production, this would open a side-by-side saved-item comparison.")
+        top_action_left, top_action_right = st.columns(2)
+        with top_action_left:
+            if st.button("Trust Verdict", key="trust_top", type="primary", use_container_width=True):
+                log_event(product["id"], "trust_verdict", {"score": score, "label": label})
+                st.success("Verdict trusted. The item is now purchase-ready.")
+        with top_action_right:
+            if st.button("Add to Bag", key="bag_top", use_container_width=True):
+                log_event(product["id"], "add_to_bag", {"source": "verdict_card", "score": score})
+                st.success("Added to bag based on the verdict.")
+        if st.button("Open Comparison Analysis", key="comparison_top", use_container_width=True):
+            candidate = comparison_target(product, load_products())
+            log_event(product["id"], "compare_again", {"similar_items": product.get("similar_saved_items", []), "candidate_id": candidate.get("id") if candidate else None})
+            if candidate:
+                open_comparison(product["id"], candidate["id"])
+            else:
+                st.info("No comparison candidate is available yet for this product.")
 
-    reason = st.selectbox(
-        "What still feels unresolved?",
-        [
-            "Size still unclear",
-            "Don't trust reviews",
-            "Found better option elsewhere",
-            "Price Doubt / value unclear",
-            "Not needed anymore",
-            "Style does not feel right",
-        ],
-        key="override_reason_{0}".format(product["id"]),
-    )
-    if st.button("Override Verdict", key="override_{0}".format(product["id"])):
-        log_event(product["id"], "override_verdict", {"reason": reason, "score": score, "hesitation": hesitation})
-        st.warning("Override captured. This would become a training signal for future verdict quality.")
+    with st.expander("Still disagree with this verdict?"):
+        reason = st.selectbox(
+            "What still feels unresolved?",
+            [
+                "Size still unclear",
+                "Don't trust reviews",
+                "Found better option elsewhere",
+                "Price Doubt / value unclear",
+                "Not needed anymore",
+                "Style does not feel right",
+            ],
+            key="override_reason_{0}".format(product["id"]),
+        )
+        if st.button("Override Verdict", key="override_{0}".format(product["id"])):
+            log_event(product["id"], "override_verdict", {"reason": reason, "score": score, "hesitation": hesitation})
+            st.warning("Override captured. This would become a training signal for future verdict quality.")
+
+
+def render_comparison(products: List[Dict]) -> None:
+    selected_id = st.session_state.get("selected_product_id")
+    selected_comparison_id = st.session_state.get("selected_comparison_id")
+    products_by_id = product_lookup(products)
+    primary = products_by_id.get(selected_id)
+
+    if not primary:
+        st.info("Open a verdict card first to compare against another saved product.")
+        if st.button("Go to Wishlist", key="comparison_to_wishlist"):
+            st.session_state["pending_view"] = VIEW_WISHLIST
+            st.rerun()
+        return
+
+    candidate = products_by_id.get(selected_comparison_id) if selected_comparison_id else comparison_target(primary, products)
+    if not candidate:
+        st.info("This saved product does not have a strong comparison candidate yet.")
+        if st.button("Back to Verdict", key="comparison_to_verdict"):
+            st.session_state["pending_view"] = VIEW_VERDICT
+            st.rerun()
+        return
+
+    resolution = build_comparison_resolution(primary, candidate)
+    winner = resolution["winner"]
+    loser = resolution["loser"]
+
+    top_left, top_right = st.columns([1.6, 1])
+    with top_left:
+        st.markdown("<div class='kicker'>Comparison analysis</div>", unsafe_allow_html=True)
+        st.title("Resolve comparison paralysis")
+        st.write("Side-by-side decision support for two saved products in the same mission.")
+        st.caption("Comparisons are only resolved within the same decision mission, not across unrelated wishlist categories.")
+        st.caption("This simulates the intended MVP flow: detect indecision, compare evidence, and recommend one next action.")
+    with top_right:
+        if st.button("← Back to Verdict", key="comparison_back_verdict", use_container_width=True):
+            st.session_state["pending_view"] = VIEW_VERDICT
+            st.rerun()
+        st.markdown(
+            "<div class='section-card'><div class='kicker'>Recommended now</div><h3 style='margin:8px 0 6px 0;'>{0}</h3><div style='font-size:1rem;color:#6b7280;'>{1}</div></div>".format(
+                escape(winner["name"]),
+                escape(", ".join(resolution["decisive_edge"]))
+            ),
+            unsafe_allow_html=True,
+        )
+
+    compare_left, compare_right = st.columns(2)
+    for column, product, hesitation, score, evidence, risks in [
+        (compare_left, primary, resolution["primary_hesitation"], resolution["primary_score"], resolution["primary_evidence"], resolution["primary_risks"]),
+        (compare_right, candidate, resolution["candidate_hesitation"], resolution["candidate_score"], resolution["candidate_evidence"], resolution["candidate_risks"]),
+    ]:
+        price, mrp, discount = pricing_snapshot(product)
+        with column:
+            st.image(product["image"], use_column_width=True)
+            st.markdown(
+                """
+                <div class='section-card'>
+                  <div class='kicker'>{status}</div>
+                  <h3 style='margin:0.35rem 0 0.25rem 0;'>{name}</h3>
+                  <div class='verdict-copy'><strong>{brand}</strong> · {category}</div>
+                  <div class='verdict-copy'>₹{price} · MRP ₹{mrp} · {discount}% OFF</div>
+                  <div class='verdict-copy'><strong>Hesitation:</strong> {hesitation}</div>
+                  <div class='verdict-copy'><strong>Confidence:</strong> {score}%</div>
+                  <div class='verdict-copy'><strong>Evidence maturity:</strong> {evidence}</div>
+                  <div class='verdict-copy'><strong>Risk flags:</strong> {risks}</div>
+                </div>
+                """.format(
+                    status=escape(maturity_status(product)),
+                    name=escape(product["name"]),
+                    brand=escape(product["brand"]),
+                    category=escape(product["category"]),
+                    price=f"{price:,}",
+                    mrp=f"{mrp:,}",
+                    discount=discount,
+                    hesitation=escape(hesitation),
+                    score=score,
+                    evidence=evidence,
+                    risks=escape(", ".join(risks) if risks else "Low observed risk"),
+                ),
+                unsafe_allow_html=True,
+            )
+
+    summary_left, summary_right = st.columns([1.15, 0.85])
+    with summary_left:
+        st.markdown(
+            """
+            <div class='section-card'>
+              <div class='kicker'>How the MVP resolves it</div>
+              <table class='case-table'>
+                {rows}
+              </table>
+            </div>
+            """.format(
+                rows=html_case_rows([
+                    ("1. Detect indecision", "The shopper kept two similar products saved in the same category and repeatedly revisited the shortlist."),
+                    ("2. Build side-by-side", "The MVP compares fit, review quality, return notes, price, and evidence maturity for both products."),
+                    ("3. Highlight decisive edge", "{0} wins because it has {1}.".format(winner["name"], ", ".join(resolution["decisive_edge"]))),
+                    ("4. Resolve next action", "Add {0} to bag now and keep {1} in wishlist only if the shopper still wants a backup option.".format(winner["name"], loser["name"])),
+                ])
+            ),
+            unsafe_allow_html=True,
+        )
+    with summary_right:
+        st.markdown(
+            """
+            <div class='section-card'>
+              <div class='kicker'>Decision summary</div>
+              <div class='verdict-copy'><strong>Choose now:</strong> {winner}</div>
+              <div class='verdict-copy'><strong>Why:</strong> {why}</div>
+              <div class='verdict-copy'><strong>Keep saved:</strong> {loser}</div>
+              <div class='verdict-copy'><strong>When to revisit:</strong> Only if the shopper still wants a second style after this purchase decision is closed.</div>
+            </div>
+            """.format(
+                winner=escape(winner["name"]),
+                why=escape("This option shows {0} with {1}% confidence versus {2}% on the alternative.".format(", ".join(resolution["decisive_edge"]), resolution["winner_score"], resolution["loser_score"])),
+                loser=escape(loser["name"]),
+            ),
+            unsafe_allow_html=True,
+        )
+
+    action_left, action_mid, action_right = st.columns(3)
+    with action_left:
+        if st.button("Choose {0}".format(short_title(winner["name"], 22)), key="choose_winner", type="primary", use_container_width=True):
+            log_event(winner["id"], "comparison_resolved", {"loser_id": loser["id"], "winner_score": resolution["winner_score"]})
+            st.success("Comparison resolved. {0} would move to bag, and {1} would stay saved.".format(winner["name"], loser["name"]))
+    with action_mid:
+        if st.button("Keep both saved", key="keep_both", use_container_width=True):
+            log_event(primary["id"], "comparison_deferred", {"candidate_id": candidate["id"]})
+            st.info("Deferred. In production, the app would remind the shopper only after new evidence arrives.")
+    with action_right:
+        if st.button("Open winner verdict", key="open_winner_verdict", use_container_width=True):
+            open_verdict(winner["id"], resolution["winner_hesitation"], resolution["winner_score"])
 
 
 def render_analytics() -> None:
@@ -1051,7 +1446,9 @@ def main() -> None:
     apply_theme()
     if st.session_state.get("pending_view"):
         st.session_state["active_view"] = st.session_state["pending_view"]
-        st.session_state["nav_view"] = st.session_state["pending_view"]
+        st.session_state["nav_view"] = (
+            VIEW_VERDICT if st.session_state["pending_view"] == VIEW_COMPARISON else st.session_state["pending_view"]
+        )
         st.session_state["pending_view"] = None
     products = load_products()
 
@@ -1071,10 +1468,10 @@ def main() -> None:
                 st.rerun()
         else:
             render_verdict(selected_product)
+    elif st.session_state["active_view"] == VIEW_COMPARISON:
+        render_comparison(products)
     elif st.session_state["active_view"] == VIEW_ANALYTICS:
         render_analytics()
-    else:
-        render_pm_notes()
 
 
 if __name__ == "__main__":
