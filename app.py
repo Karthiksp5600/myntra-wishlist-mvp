@@ -22,9 +22,11 @@ DATA_PATH = BASE_DIR / "data" / "products.json"
 DB_PATH = BASE_DIR / "analytics.db"
 
 VIEW_WISHLIST = "Wishlist"
+VIEW_PRODUCT = "Product Page"
 VIEW_VERDICT = "Verdict Card"
 VIEW_ANALYTICS = "Analytics"
 VIEW_COMPARISON = "Comparison Analysis"
+FEATURED_PRODUCT_ID = "MYN-002"
 
 load_dotenv()
 
@@ -436,6 +438,13 @@ def apply_theme() -> None:
             font-weight: 700;
             font-size: 0.92rem;
         }
+        .m-icons a {
+            color: #282c3f;
+            text-decoration: none;
+        }
+        .m-icons a:hover {
+            color: #ff3f6c;
+        }
         .wishlist-top {
             padding: 0.05rem 0 0.55rem 0;
         }
@@ -666,6 +675,24 @@ def apply_theme() -> None:
             border: 1px solid rgba(217, 119, 6, 0.18);
             color: #92400e;
         }
+        .save-nudge {
+            margin-top: 1rem;
+            padding: 1rem 1.05rem;
+            background: #fff6f8;
+            border: 1px solid #ffb5c8;
+            border-left: 5px solid #ff3f6c;
+            border-radius: 12px;
+        }
+        .save-nudge h3 {
+            margin: 0 0 0.35rem 0;
+            color: #282c3f;
+            font-size: 1.1rem;
+        }
+        .save-nudge p {
+            margin: 0;
+            color: #535766;
+            line-height: 1.45;
+        }
         .verdict-stats {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -819,7 +846,7 @@ def apply_theme() -> None:
 
 def init_state() -> None:
     if "active_view" not in st.session_state:
-        st.session_state["active_view"] = VIEW_WISHLIST
+        st.session_state["active_view"] = VIEW_PRODUCT
     if "nav_view" not in st.session_state:
         st.session_state["nav_view"] = st.session_state["active_view"]
     if "selected_product_id" not in st.session_state:
@@ -830,6 +857,10 @@ def init_state() -> None:
         st.session_state["last_llm_error"] = None
     if "pending_view" not in st.session_state:
         st.session_state["pending_view"] = None
+    if "saved_product_ids" not in st.session_state:
+        st.session_state["saved_product_ids"] = None
+    if "decision_nudge" not in st.session_state:
+        st.session_state["decision_nudge"] = None
 
 
 def open_verdict(product_id: str, hesitation: str, score: int) -> None:
@@ -842,6 +873,41 @@ def open_verdict(product_id: str, hesitation: str, score: int) -> None:
 
 def product_lookup(products: List[Dict]) -> Dict[str, Dict]:
     return {product["id"]: product for product in products}
+
+
+def saved_product_ids(products: List[Dict]) -> List[str]:
+    if st.session_state["saved_product_ids"] is None:
+        st.session_state["saved_product_ids"] = [
+            product["id"] for product in products if product["id"] != FEATURED_PRODUCT_ID
+        ]
+    return st.session_state["saved_product_ids"]
+
+
+def is_saved(product_id: str, products: List[Dict]) -> bool:
+    return product_id in saved_product_ids(products)
+
+
+def save_with_decision_nudge(product: Dict, products: List[Dict]) -> None:
+    saved_ids = saved_product_ids(products)
+    if product["id"] not in saved_ids:
+        saved_ids.append(product["id"])
+
+    candidate = comparison_target(product, products)
+    st.session_state["decision_nudge"] = {
+        "product_id": product["id"],
+        "candidate_id": candidate["id"] if candidate and candidate["id"] in saved_ids else None,
+    }
+    log_event(product["id"], "wishlist_saved", {"candidate_id": st.session_state["decision_nudge"]["candidate_id"]})
+    if st.session_state["decision_nudge"]["candidate_id"]:
+        log_event(product["id"], "decision_nudge_shown", {"candidate_id": st.session_state["decision_nudge"]["candidate_id"]})
+
+
+def discard_saved_product(product_id: str, source_product_id: str, source: str) -> None:
+    st.session_state["saved_product_ids"] = [
+        saved_id for saved_id in st.session_state["saved_product_ids"] if saved_id != product_id
+    ]
+    st.session_state["decision_nudge"] = None
+    log_event(source_product_id, "decision_nudge_discarded", {"discarded_product_id": product_id, "source": source})
 
 
 def comparison_group_for(product: Dict) -> str:
@@ -950,6 +1016,31 @@ def open_comparison(primary_id: str, candidate_id: Optional[str]) -> None:
     st.rerun()
 
 
+@st.dialog("Decision Nudge")
+def render_decision_nudge_dialog(product: Dict, candidate: Dict) -> None:
+    st.markdown(
+        """
+        <div class='save-nudge'>
+          <h3>You already saved a similar shoe</h3>
+          <p><strong>{candidate}</strong> is already in your wishlist. Compare the two now to make a choice, or remove the alternative.</p>
+        </div>
+        """.format(candidate=escape(candidate["name"])),
+        unsafe_allow_html=True,
+    )
+    st.caption("This nudge appears at the moment of saving, before the decision is deferred.")
+
+    if st.button("Compare saved shoes", key="nudge_compare", type="primary", use_container_width=True):
+        log_event(product["id"], "decision_nudge_comparison_opened", {"candidate_id": candidate["id"]})
+        open_comparison(product["id"], candidate["id"])
+    if st.button("Remove {0}".format(short_title(candidate["name"], 24)), key="nudge_discard", use_container_width=True):
+        discard_saved_product(candidate["id"], product["id"], "save_nudge")
+        st.rerun()
+    if st.button("Keep both for now", key="nudge_keep_both", use_container_width=True):
+        st.session_state["decision_nudge"] = None
+        log_event(product["id"], "decision_nudge_deferred", {"candidate_id": candidate["id"]})
+        st.rerun()
+
+
 def render_top_nav() -> None:
     st.markdown(
         """
@@ -968,7 +1059,7 @@ def render_top_nav() -> None:
             <div class="m-search">🔎&nbsp;&nbsp;Search for products, brands and more</div>
             <div class="m-icons">
               <span>Profile</span>
-              <span>Wishlist</span>
+              <a href="?view=wishlist" target="_self" aria-label="Open wishlist">Wishlist</a>
               <span>Bag</span>
             </div>
           </div>
@@ -992,10 +1083,18 @@ def render_header(products: List[Dict]) -> None:
         st.warning("Groq fallback mode is active because the LLM request failed: {0}".format(st.session_state["last_llm_error"]))
 
 
+def apply_requested_view() -> None:
+    requested_view = st.query_params.get("view")
+    if requested_view == "wishlist":
+        st.session_state["active_view"] = VIEW_WISHLIST
+        st.session_state["nav_view"] = VIEW_WISHLIST
+        st.query_params.clear()
+
+
 def render_navigation() -> None:
     if st.session_state.get("active_view") in {VIEW_VERDICT, VIEW_COMPARISON}:
         return
-    visible_views = [VIEW_WISHLIST, VIEW_VERDICT, VIEW_ANALYTICS]
+    visible_views = [VIEW_PRODUCT, VIEW_WISHLIST, VIEW_VERDICT, VIEW_ANALYTICS]
     if st.session_state.get("active_view") == VIEW_COMPARISON:
         st.session_state["nav_view"] = VIEW_VERDICT
     elif st.session_state.get("nav_view") not in visible_views:
@@ -1076,6 +1175,54 @@ def render_wishlist(products: List[Dict]) -> None:
         for offset, product in enumerate(products[row_start : row_start + 4]):
             with columns[offset]:
                 render_product_card(product)
+
+
+def render_product_page(product: Dict, products: List[Dict]) -> None:
+    price, mrp, discount = pricing_snapshot(product)
+    st.markdown("<div class='kicker'>Product page</div>", unsafe_allow_html=True)
+    product_left, product_right = st.columns([1, 1.15])
+    with product_left:
+        st.image(product["image"], use_column_width=True)
+    with product_right:
+        st.markdown(
+            """
+            <div class='section-card'>
+              <div class='kicker'>{brand}</div>
+              <h2 style='margin:0.32rem 0 0.22rem 0;'>{name}</h2>
+              <div class='verdict-copy'>{category} · Everyday casual sneaker</div>
+              <div class='verdict-price-line'>₹{price} <span style='color:#94969f;text-decoration:line-through;font-weight:500;'>₹{mrp}</span> <span style='color:#ff905a;font-size:0.9rem;'>{discount}% OFF</span></div>
+              <div class='verdict-copy'><strong>Why it is worth considering:</strong> Comfortable for everyday wear with strong review coverage, but shoppers often compare it with similar white sneakers before deciding.</div>
+            </div>
+            """.format(
+                brand=escape(product["brand"]),
+                name=escape(product["name"]),
+                category=escape(product["category"]),
+                price=f"{price:,}",
+                mrp=f"{mrp:,}",
+                discount=discount,
+            ),
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div style='margin-top:0.72rem;'><strong>Select size</strong></div>", unsafe_allow_html=True)
+        st.radio("Size", ["7", "8", "9", "10"], horizontal=True, index=2, label_visibility="collapsed", key="featured_size")
+        if is_saved(product["id"], products):
+            st.success("Saved to Wishlist")
+            if st.button("Review similar saved shoes", key="review_featured_product", use_container_width=True):
+                candidate = comparison_target(product, products)
+                st.session_state["decision_nudge"] = {
+                    "product_id": product["id"],
+                    "candidate_id": candidate["id"] if candidate and is_saved(candidate["id"], products) else None,
+                }
+                st.rerun()
+        elif st.button("Save to Wishlist", key="save_featured_product", type="primary", use_container_width=True):
+            save_with_decision_nudge(product, products)
+            st.rerun()
+
+    nudge = st.session_state.get("decision_nudge")
+    if nudge and nudge.get("product_id") == product["id"]:
+        candidate = product_lookup(products).get(nudge.get("candidate_id"))
+        if candidate and is_saved(candidate["id"], products):
+            render_decision_nudge_dialog(product, candidate)
 
 
 def render_verdict(product: Dict) -> None:
@@ -1444,6 +1591,7 @@ def main() -> None:
     init_db()
     init_state()
     apply_theme()
+    apply_requested_view()
     if st.session_state.get("pending_view"):
         st.session_state["active_view"] = st.session_state["pending_view"]
         st.session_state["nav_view"] = (
@@ -1451,15 +1599,25 @@ def main() -> None:
         )
         st.session_state["pending_view"] = None
     products = load_products()
+    products_by_id = product_lookup(products)
+    featured_product = products_by_id.get(FEATURED_PRODUCT_ID)
+    wishlist_products = [
+        product for product in products if product["id"] in saved_product_ids(products)
+    ]
 
-    render_header(products)
+    render_header(wishlist_products)
     render_navigation()
 
     selected_id = st.session_state.get("selected_product_id")
     selected_product = next((product for product in products if product["id"] == selected_id), None)
 
-    if st.session_state["active_view"] == VIEW_WISHLIST:
-        render_wishlist(products)
+    if st.session_state["active_view"] == VIEW_PRODUCT:
+        if featured_product:
+            render_product_page(featured_product, products)
+        else:
+            st.error("The featured sneaker could not be loaded.")
+    elif st.session_state["active_view"] == VIEW_WISHLIST:
+        render_wishlist(wishlist_products)
     elif st.session_state["active_view"] == VIEW_VERDICT:
         if not selected_product:
             st.info("Open a verdict card from the wishlist to see the detailed decision view.")
