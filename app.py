@@ -3,6 +3,7 @@ import os
 import sqlite3
 import base64
 import mimetypes
+import time
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
@@ -284,14 +285,18 @@ If the product is recommendation-worthy, include concrete positive buyer signals
                 {"role": "user", "content": prompt},
             ],
             temperature=0.2,
-            max_tokens=700,
+            max_tokens=320,
         )
         content = response.choices[0].message.content.strip()
         if content.startswith("```"):
             content = content.strip("`").replace("json", "", 1).strip()
+        st.session_state["last_llm_error"] = None
         return json.loads(content)
     except Exception as exc:
-        st.session_state["last_llm_error"] = str(exc)
+        # Avoid retrying on every Streamlit rerun after a provider rate limit.
+        st.session_state["last_llm_error"] = "temporarily unavailable"
+        if "429" in str(exc) or "rate_limit" in str(exc).lower():
+            st.session_state["llm_retry_after"] = time.time() + 60
         return None
 
 
@@ -301,12 +306,16 @@ def get_case_file(product: Dict, include_llm: bool = True) -> Tuple[str, str, in
     if maturity_status(product) != "Verdict Ready":
         score = min(score, 61)
     label = verdict_label(score)
-    # Card grids should render immediately; call Groq only for an opened verdict.
-    case = (
-        generate_llm_case_file(product, hesitation, score)
-        if include_llm
-        else None
-    ) or fallback_case_file(product, hesitation, score)
+    # Card grids and comparisons should render immediately; call Groq only for an opened verdict.
+    case = None
+    if include_llm:
+        cache_key = "{0}:{1}".format(product["id"], score)
+        case = st.session_state["llm_case_cache"].get(cache_key)
+        if case is None and time.time() >= st.session_state["llm_retry_after"]:
+            case = generate_llm_case_file(product, hesitation, score)
+            if case is not None:
+                st.session_state["llm_case_cache"][cache_key] = case
+    case = case or fallback_case_file(product, hesitation, score)
     return hesitation, explanation, score, label, case
 
 
@@ -892,6 +901,10 @@ def init_state() -> None:
         st.session_state["selected_comparison_id"] = None
     if "last_llm_error" not in st.session_state:
         st.session_state["last_llm_error"] = None
+    if "llm_case_cache" not in st.session_state:
+        st.session_state["llm_case_cache"] = {}
+    if "llm_retry_after" not in st.session_state:
+        st.session_state["llm_retry_after"] = 0.0
     if "pending_view" not in st.session_state:
         st.session_state["pending_view"] = None
     if "saved_product_ids" not in st.session_state:
@@ -987,8 +1000,8 @@ def risk_markers(product: Dict) -> List[str]:
 
 
 def build_comparison_resolution(primary: Dict, candidate: Dict) -> Dict[str, object]:
-    primary_hesitation, _, primary_score, primary_label, primary_case = get_case_file(primary)
-    candidate_hesitation, _, candidate_score, candidate_label, candidate_case = get_case_file(candidate)
+    primary_hesitation, _, primary_score, primary_label, primary_case = get_case_file(primary, include_llm=False)
+    candidate_hesitation, _, candidate_score, candidate_label, candidate_case = get_case_file(candidate, include_llm=False)
     primary_evidence = evidence_strength(primary)
     candidate_evidence = evidence_strength(candidate)
     primary_risks = risk_markers(primary)
@@ -1118,8 +1131,6 @@ def render_header(products: List[Dict]) -> None:
             ),
             unsafe_allow_html=True,
         )
-    if st.session_state.get("last_llm_error"):
-        st.warning("Groq fallback mode is active because the LLM request failed: {0}".format(st.session_state["last_llm_error"]))
 
 
 def apply_requested_view() -> None:
