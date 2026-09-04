@@ -247,7 +247,7 @@ def _watch_outs(return_notes: List[str], reviews: List[str]) -> str:
 
 def _recommended_action(score: int) -> str:
     if score >= 78:
-        return "Trust the verdict and add to bag if the shopper still wants this category."
+        return "Add to cart or buy now with confidence."
     if score >= 62:
         return "Buy only after checking the highlighted fit and quality watch-outs."
     return "Wait or compare against similar saved products before adding to bag."
@@ -693,6 +693,38 @@ def apply_theme() -> None:
             color: #535766;
             line-height: 1.45;
         }
+        .decision-summary {
+            margin-top: 1.1rem;
+            padding: 1rem 1.05rem;
+            border: 1px solid #dce4ea;
+            border-radius: 16px;
+            background: #ffffff;
+            box-shadow: 0 6px 20px rgba(40, 44, 63, 0.04);
+        }
+        .decision-summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.8rem;
+            margin-top: 0.75rem;
+        }
+        .decision-summary-item {
+            padding: 0.75rem;
+            background: #fafbfc;
+            border-radius: 10px;
+        }
+        .decision-summary-label {
+            color: #7e818c;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .decision-summary-value {
+            margin-top: 0.3rem;
+            color: #282c3f;
+            font-size: 0.96rem;
+            line-height: 1.42;
+        }
         .verdict-stats {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1004,6 +1036,8 @@ def build_comparison_resolution(primary: Dict, candidate: Dict) -> Dict[str, obj
         "candidate_evidence": candidate_evidence,
         "primary_risks": primary_risks,
         "candidate_risks": candidate_risks,
+        "winner_risks": primary_risks if winner["id"] == primary["id"] else candidate_risks,
+        "loser_risks": candidate_risks if winner["id"] == primary["id"] else primary_risks,
         "decisive_edge": decisive_edge,
     }
 
@@ -1162,13 +1196,6 @@ def render_product_card(product: Dict) -> None:
             if st.button("MOVE TO BAG", key="bag_{0}".format(product["id"]), use_container_width=True):
                 log_event(product["id"], "move_to_bag_clicked", {"status": status, "score": score})
                 st.success("Move-to-bag interaction captured.")
-        st.caption(
-            "Verdict opens now with full evidence."
-            if status == "Verdict Ready"
-            else "Verdict is unavailable until enough confidence is reached."
-        )
-
-
 def render_wishlist(products: List[Dict]) -> None:
     for row_start in range(0, len(products), 4):
         columns = st.columns(4)
@@ -1225,6 +1252,66 @@ def render_product_page(product: Dict, products: List[Dict]) -> None:
             render_decision_nudge_dialog(product, candidate)
 
 
+def render_comparison_decision_summary(primary: Dict, candidate: Dict, resolution: Dict[str, object]) -> None:
+    winner = resolution["winner"]
+    loser = resolution["loser"]
+    primary_hesitation, primary_explanation = diagnose_hesitation(primary["signals"], primary)
+    primary_signals = primary["signals"]
+    st.markdown(
+        """
+        <div class='decision-summary'>
+          <div class='kicker'>Decision summary</div>
+          <div class='verdict-copy'><strong>Recommended choice:</strong> {winner}</div>
+          <div class='verdict-copy'><strong>Why it is the stronger choice:</strong> {why}</div>
+          <div class='decision-summary-grid'>
+            <div class='decision-summary-item'>
+              <div class='decision-summary-label'>Your hesitation</div>
+              <div class='decision-summary-value'><strong>{hesitation}</strong><br>{explanation}</div>
+            </div>
+            <div class='decision-summary-item'>
+              <div class='decision-summary-label'>Your decision signals</div>
+              <div class='decision-summary-value'>{size_chart} seconds on size chart · {review_scroll}% review scroll<br>{similar} similar products viewed · {revisits} repeat visits</div>
+            </div>
+            <div class='decision-summary-item'>
+              <div class='decision-summary-label'>Evidence behind the choice</div>
+              <div class='decision-summary-value'>{reviews} reviews · {buyer_notes} similar-buyer signals · {returns} return-data signals<br>{risks}</div>
+            </div>
+          </div>
+          <div class='verdict-copy'><strong>Next action:</strong> Add {winner} to bag. Keep {loser} only if you still need a backup option.</div>
+        </div>
+        """.format(
+            winner=escape(winner["name"]),
+            loser=escape(loser["name"]),
+            why=escape("It has {0} with {1}% confidence versus {2}% on the alternative.".format(", ".join(resolution["decisive_edge"]), resolution["winner_score"], resolution["loser_score"])),
+            hesitation=escape(primary_hesitation),
+            explanation=escape(primary_explanation),
+            size_chart=primary_signals.get("size_chart_seconds", 0),
+            review_scroll=primary_signals.get("review_scroll_percent", 0),
+            similar=primary_signals.get("similar_products_viewed", 0),
+            revisits=primary_signals.get("pdp_revisits", 0),
+            reviews=len(winner.get("reviews", [])),
+            buyer_notes=len(winner.get("similar_buyer_notes", [])),
+            returns=len(winner.get("return_notes", [])),
+            risks=escape("Risk flags: {0}".format(", ".join(resolution["winner_risks"]) if resolution["winner_risks"] else "low observed risk")),
+        ),
+        unsafe_allow_html=True,
+    )
+
+    action_left, action_mid, action_right = st.columns(3)
+    with action_left:
+        if st.button("Add {0} to Bag".format(short_title(winner["name"], 18)), key="add_winner_to_bag", type="primary", use_container_width=True):
+            log_event(winner["id"], "comparison_add_to_bag", {"loser_id": loser["id"], "winner_score": resolution["winner_score"]})
+            st.success("{0} was added to bag. {1} remains saved as your alternative.".format(winner["name"], loser["name"]))
+    with action_mid:
+        if st.button("Buy {0} now".format(short_title(winner["name"], 18)), key="buy_winner_now", use_container_width=True):
+            log_event(winner["id"], "comparison_buy_now", {"loser_id": loser["id"], "winner_score": resolution["winner_score"]})
+            st.success("Buy-now flow started for {0}.".format(winner["name"]))
+    with action_right:
+        if st.button("Keep both saved", key="keep_both", use_container_width=True):
+            log_event(primary["id"], "comparison_deferred", {"candidate_id": candidate["id"]})
+            st.info("Deferred. In production, the app would remind the shopper only after new evidence arrives.")
+
+
 def render_verdict(product: Dict) -> None:
     hesitation, explanation, score, label, case = get_case_file(product)
     price, mrp, discount = pricing_snapshot(product)
@@ -1264,6 +1351,39 @@ def render_verdict(product: Dict) -> None:
             ),
             unsafe_allow_html=True,
         )
+
+    st.markdown(
+        """
+        <div class='section-card'>
+          <div class='kicker'>Decision now</div>
+          <div class='verdict-copy'><strong>Recommended action:</strong> {recommended_action}</div>
+          <div class='verdict-copy'>{positive_signals}</div>
+          <div class='verdict-copy'>{watch_outs}</div>
+        </div>
+        """.format(
+            recommended_action=escape(case["recommended_action"]),
+            positive_signals=escape(positive_signals),
+            watch_outs=escape(case["watch_outs"]),
+        ),
+        unsafe_allow_html=True,
+    )
+    top_action_left, top_action_mid, top_action_right = st.columns(3)
+    with top_action_left:
+        if st.button("Add to Cart", key="verdict_add_to_cart", type="primary", use_container_width=True):
+            log_event(product["id"], "add_to_cart", {"source": "verdict_card", "score": score})
+            st.success("Added to cart based on the verdict.")
+    with top_action_mid:
+        if st.button("Buy Now", key="verdict_buy_now", use_container_width=True):
+            log_event(product["id"], "buy_now_clicked", {"source": "verdict_card", "score": score})
+            st.success("Buy-now flow started for this item.")
+    with top_action_right:
+        if st.button("Open Comparison Analysis", key="comparison_top", use_container_width=True):
+            candidate = comparison_target(product, load_products())
+            log_event(product["id"], "compare_again", {"similar_items": product.get("similar_saved_items", []), "candidate_id": candidate.get("id") if candidate else None})
+            if candidate:
+                open_comparison(product["id"], candidate["id"])
+            else:
+                st.info("No comparison candidate is available yet for this product.")
 
     content_left, content_mid, content_right = st.columns([0.9, 1.18, 0.92])
     with content_left:
@@ -1346,41 +1466,6 @@ def render_verdict(product: Dict) -> None:
             unsafe_allow_html=True,
         )
 
-    decision_left, decision_right = st.columns([1.15, 0.85])
-    with decision_left:
-        st.markdown(
-            """
-            <div class='section-card'>
-              <div class='kicker'>Decision now</div>
-              <div class='verdict-copy'><strong>Recommended action:</strong> {recommended_action}</div>
-              <div class='verdict-copy'><strong>Positive signals:</strong> {positive_signals}</div>
-              <div class='verdict-copy'><strong>Watch-outs:</strong> {watch_outs}</div>
-            </div>
-            """.format(
-                recommended_action=escape(case["recommended_action"]),
-                positive_signals=escape(positive_signals),
-                watch_outs=escape(case["watch_outs"]),
-            ),
-            unsafe_allow_html=True,
-        )
-    with decision_right:
-        top_action_left, top_action_right = st.columns(2)
-        with top_action_left:
-            if st.button("Trust Verdict", key="trust_top", type="primary", use_container_width=True):
-                log_event(product["id"], "trust_verdict", {"score": score, "label": label})
-                st.success("Verdict trusted. The item is now purchase-ready.")
-        with top_action_right:
-            if st.button("Add to Bag", key="bag_top", use_container_width=True):
-                log_event(product["id"], "add_to_bag", {"source": "verdict_card", "score": score})
-                st.success("Added to bag based on the verdict.")
-        if st.button("Open Comparison Analysis", key="comparison_top", use_container_width=True):
-            candidate = comparison_target(product, load_products())
-            log_event(product["id"], "compare_again", {"similar_items": product.get("similar_saved_items", []), "candidate_id": candidate.get("id") if candidate else None})
-            if candidate:
-                open_comparison(product["id"], candidate["id"])
-            else:
-                st.info("No comparison candidate is available yet for this product.")
-
     with st.expander("Still disagree with this verdict?"):
         reason = st.selectbox(
             "What still feels unresolved?",
@@ -1443,6 +1528,8 @@ def render_comparison(products: List[Dict]) -> None:
             unsafe_allow_html=True,
         )
 
+    render_comparison_decision_summary(primary, candidate, resolution)
+
     compare_left, compare_right = st.columns(2)
     for column, product, hesitation, score, evidence, risks in [
         (compare_left, primary, resolution["primary_hesitation"], resolution["primary_score"], resolution["primary_evidence"], resolution["primary_risks"]),
@@ -1479,58 +1566,6 @@ def render_comparison(products: List[Dict]) -> None:
                 unsafe_allow_html=True,
             )
 
-    summary_left, summary_right = st.columns([1.15, 0.85])
-    with summary_left:
-        st.markdown(
-            """
-            <div class='section-card'>
-              <div class='kicker'>How the MVP resolves it</div>
-              <table class='case-table'>
-                {rows}
-              </table>
-            </div>
-            """.format(
-                rows=html_case_rows([
-                    ("1. Detect indecision", "The shopper kept two similar products saved in the same category and repeatedly revisited the shortlist."),
-                    ("2. Build side-by-side", "The MVP compares fit, review quality, return notes, price, and evidence maturity for both products."),
-                    ("3. Highlight decisive edge", "{0} wins because it has {1}.".format(winner["name"], ", ".join(resolution["decisive_edge"]))),
-                    ("4. Resolve next action", "Add {0} to bag now and keep {1} in wishlist only if the shopper still wants a backup option.".format(winner["name"], loser["name"])),
-                ])
-            ),
-            unsafe_allow_html=True,
-        )
-    with summary_right:
-        st.markdown(
-            """
-            <div class='section-card'>
-              <div class='kicker'>Decision summary</div>
-              <div class='verdict-copy'><strong>Choose now:</strong> {winner}</div>
-              <div class='verdict-copy'><strong>Why:</strong> {why}</div>
-              <div class='verdict-copy'><strong>Keep saved:</strong> {loser}</div>
-              <div class='verdict-copy'><strong>When to revisit:</strong> Only if the shopper still wants a second style after this purchase decision is closed.</div>
-            </div>
-            """.format(
-                winner=escape(winner["name"]),
-                why=escape("This option shows {0} with {1}% confidence versus {2}% on the alternative.".format(", ".join(resolution["decisive_edge"]), resolution["winner_score"], resolution["loser_score"])),
-                loser=escape(loser["name"]),
-            ),
-            unsafe_allow_html=True,
-        )
-
-    action_left, action_mid, action_right = st.columns(3)
-    with action_left:
-        if st.button("Choose {0}".format(short_title(winner["name"], 22)), key="choose_winner", type="primary", use_container_width=True):
-            log_event(winner["id"], "comparison_resolved", {"loser_id": loser["id"], "winner_score": resolution["winner_score"]})
-            st.success("Comparison resolved. {0} would move to bag, and {1} would stay saved.".format(winner["name"], loser["name"]))
-    with action_mid:
-        if st.button("Keep both saved", key="keep_both", use_container_width=True):
-            log_event(primary["id"], "comparison_deferred", {"candidate_id": candidate["id"]})
-            st.info("Deferred. In production, the app would remind the shopper only after new evidence arrives.")
-    with action_right:
-        if st.button("Open winner verdict", key="open_winner_verdict", use_container_width=True):
-            open_verdict(winner["id"], resolution["winner_hesitation"], resolution["winner_score"])
-
-
 def render_analytics() -> None:
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
     st.markdown("<div class='kicker'>MVP analytics</div>", unsafe_allow_html=True)
@@ -1543,7 +1578,7 @@ def render_analytics() -> None:
 
     metric_left, metric_mid_left, metric_mid_right, metric_right = st.columns(4)
     metric_left.metric("Verdict views", int((df["event_name"] == "verdict_viewed").sum()))
-    metric_mid_left.metric("Trust clicks", int((df["event_name"] == "trust_verdict").sum()))
+    metric_mid_left.metric("Buy Now clicks", int((df["event_name"] == "buy_now_clicked").sum()))
     metric_mid_right.metric("Add-to-bag", int((df["event_name"] == "add_to_bag").sum()))
     metric_right.metric("Overrides", int((df["event_name"] == "override_verdict").sum()))
 
@@ -1567,7 +1602,7 @@ The prototype does not use discounts, coupons, or price locks. It attempts to im
 
 ### Success metrics to show in the deck
 - Verdict Card open rate
-- Trust Verdict rate
+- Buy Now rate
 - Wishlist-to-bag rate after verdict
 - Override rate and override reasons
 - Return / size-return guardrail
