@@ -3,7 +3,7 @@ import os
 import sqlite3
 import base64
 import mimetypes
-from datetime import datetime
+from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -76,7 +76,7 @@ def log_event(product_id: str, event_name: str, metadata: Optional[Dict] = None)
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "INSERT INTO events (ts, product_id, event_name, metadata) VALUES (?, ?, ?, ?)",
-        (datetime.utcnow().isoformat(), product_id, event_name, json.dumps(metadata or {})),
+        (datetime.now(timezone.utc).isoformat(), product_id, event_name, json.dumps(metadata or {})),
     )
     conn.commit()
     conn.close()
@@ -295,13 +295,18 @@ If the product is recommendation-worthy, include concrete positive buyer signals
         return None
 
 
-def get_case_file(product: Dict) -> Tuple[str, str, int, str, Dict]:
+def get_case_file(product: Dict, include_llm: bool = True) -> Tuple[str, str, int, str, Dict]:
     hesitation, explanation = diagnose_hesitation(product["signals"], product)
     score = confidence_score(product, hesitation)
     if maturity_status(product) != "Verdict Ready":
         score = min(score, 61)
     label = verdict_label(score)
-    case = generate_llm_case_file(product, hesitation, score) or fallback_case_file(product, hesitation, score)
+    # Card grids should render immediately; call Groq only for an opened verdict.
+    case = (
+        generate_llm_case_file(product, hesitation, score)
+        if include_llm
+        else None
+    ) or fallback_case_file(product, hesitation, score)
     return hesitation, explanation, score, label, case
 
 
@@ -1150,7 +1155,7 @@ def render_navigation() -> None:
 
 def render_product_card(product: Dict) -> None:
     status = maturity_status(product)
-    hesitation, _, score, _, _ = get_case_file(product)
+    hesitation, _, score, _, _ = get_case_file(product, include_llm=False)
     price, mrp, discount = pricing_snapshot(product)
     shell_class = "ready-shell" if status == "Verdict Ready" else "building-shell"
     image = image_src(product["image"])
